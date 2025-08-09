@@ -32,6 +32,8 @@
   const AIR_FRICTION = 0.95;
   const MAX_EGGS_STORAGE_KEY = 'fer_vs_fluff_eggs';
   const HIGHSCORE_KEY = 'fer_vs_fluff_highscores_v1';
+  let globalScoresCache = [];
+  let globalProvider = null; // { submit: async ({name,score,eggs,level})=>void, fetchTop: async ()=>[{name,score,ts}] }
 
   // Input state
   const keysDown = new Set();
@@ -68,41 +70,53 @@
     if (!scores.length) { scoreboardEl.style.display='none'; return; }
     scoreboardEl.style.display = 'block';
     const rows = scores.map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('');
-    const hint = '<div style="margin-top:8px;color:#9aa0a6;font-size:12px;">Use "Submit Global" to post a score to GitHub Issues (requires sign-in).</div>';
-    const global = globalScoresCache.length
-      ? '<h3>Global (GitHub Issues)</h3>' + globalScoresCache.slice(0, 50).map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('')
-      : '';
-    scoreboardEl.innerHTML = '<div style="margin-bottom:6px;"><strong>Local Scoreboard</strong></div>' + rows + hint + global;
+    const hasGlobal = globalScoresCache.length > 0;
+    const global = hasGlobal
+      ? '<h3>Global Scoreboard</h3>' + globalScoresCache.slice(0, 50).map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('')
+      : (globalProvider ? '<div style="margin-top:8px;color:#9aa0a6;font-size:12px;">Global scoreboard is enabled. Submit to populate.</div>' : '<div style="margin-top:8px;color:#9aa0a6;font-size:12px;">Global scoreboard not configured.</div>');
+    scoreboardEl.innerHTML = '<div style="margin-bottom:6px;"><strong>Local Scoreboard</strong></div>' + rows + global;
   }
 
-  // Global scores via GitHub Issues (public read, no auth). We read issues labeled "score".
-  let globalScoresCache = [];
-  async function fetchGlobalScores() {
+  // Global scores via Supabase REST (no login for players; use anon key). Configure by adding scoreboard_config.json.
+  async function loadGlobalProvider() {
     try {
-      const url = 'https://api.github.com/repos/dannymeese/Fer-vs-Fluff/issues?labels=score&state=open&per_page=100&sort=created&direction=desc';
-      const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+      const res = await fetch('scoreboard_config.json', { cache: 'no-store' });
       if (!res.ok) return;
-      const items = await res.json();
-      const parsed = [];
-      for (const it of items) {
-        // Prefer parsing from title like: [Score] Name — 1234
-        let name = 'Player'; let score = 0;
-        const m = /\[Score\]\s*(.+?)\s*[—-]\s*(\d+)/i.exec(it.title || '');
-        if (m) { name = m[1]; score = parseInt(m[2], 10) || 0; }
-        else {
-          const mb = /Score:\s*(\d+)/i.exec(it.body || '');
-          const mn = /Player:\s*(.+)/i.exec(it.body || '');
-          if (mn) name = mn[1].trim();
-          if (mb) score = parseInt(mb[1], 10) || 0;
-        }
-        parsed.push({ name, score, ts: Date.parse(it.created_at) || 0 });
+      const cfg = await res.json();
+      if (cfg.provider === 'supabase' && cfg.supabaseUrl && cfg.supabaseAnonKey && cfg.table) {
+        globalProvider = makeSupabaseProvider(cfg.supabaseUrl, cfg.supabaseAnonKey, cfg.table);
+        await refreshGlobalFromProvider();
       }
-      parsed.sort((a,b)=>b.score-a.score || a.ts-b.ts);
-      globalScoresCache = parsed;
+    } catch {}
+  }
+  function makeSupabaseProvider(url, anonKey, table) {
+    const base = `${url.replace(/\/$/, '')}/rest/v1/${table}`;
+    const headers = {
+      'apikey': anonKey,
+      'Authorization': `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+    return {
+      async submit({ name, score, eggs, level }) {
+        const body = { name, score, eggs, level };
+        const res = await fetch(base, { method: 'POST', headers, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error('submit failed');
+      },
+      async fetchTop() {
+        const res = await fetch(`${base}?select=name,score,created_at&order=score.desc,created_at.asc&limit=100`, { headers });
+        if (!res.ok) throw new Error('fetch failed');
+        const rows = await res.json();
+        return rows.map(r => ({ name: r.name, score: r.score|0, ts: Date.parse(r.created_at || '')||0 }));
+      }
+    };
+  }
+  async function refreshGlobalFromProvider() {
+    if (!globalProvider) return;
+    try {
+      globalScoresCache = await globalProvider.fetchTop();
       renderScores();
-    } catch (e) {
-      // ignore
-    }
+    } catch {}
   }
 
   // Audio engine (Web Audio API, procedurally generated simple tones)
@@ -1021,13 +1035,20 @@ function drawBalloon(x, y) {
     });
   }
   if (typeof globalScoreBtn !== 'undefined' && globalScoreBtn) {
-    globalScoreBtn.addEventListener('click', () => {
+    globalScoreBtn.addEventListener('click', async () => {
       const name = (usernameInput?.value || 'Player').trim().slice(0,16) || 'Player';
       const score = eggCount * 100 + state.waveIndex * 10;
-      const title = encodeURIComponent(`[Score] ${name} — ${score}`);
-      const body = encodeURIComponent(`Player: ${name}\nScore: ${score}\nEggs: ${eggCount}\nLevel: ${state.waveIndex + 1}`);
-      const url = `https://github.com/dannymeese/Fer-vs-Fluff/issues/new?title=${title}&body=${body}&labels=score`;
-      window.open(url, '_blank');
+      if (!globalProvider) {
+        showToast('Global scoreboard not configured');
+        return;
+      }
+      try {
+        await globalProvider.submit({ name, score, eggs: eggCount, level: state.waveIndex + 1 });
+        await refreshGlobalFromProvider();
+        showToast('Global score submitted');
+      } catch {
+        showToast('Failed to submit global score');
+      }
     });
   }
 
@@ -1050,6 +1071,9 @@ function drawBalloon(x, y) {
   }
   window.addEventListener('pointerdown', kickMusicOnce);
   window.addEventListener('keydown', kickMusicOnce);
+
+  // Attempt to load global scoreboard provider (no login required if using public anon key)
+  loadGlobalProvider();
 
   // Initial overlay content
   overlay.querySelector('h1').textContent = 'Fer vs. Fluff';

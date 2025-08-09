@@ -1,0 +1,8 @@
+{
+  "provider": "supabase",
+  "supabaseUrl": "https://YOUR-PROJECT.supabase.co",
+  "supabaseAnonKey": "YOUR_ANON_PUBLIC_KEY",
+  "table": "scores"
+}
+
+

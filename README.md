@@ -19,4 +19,16 @@ Open `index.html` in a modern browser.
 - Perks unlock each level: Level 1 → Horse (speed), Level 2 → Jetpack (hover).
 - Between levels: tiny duck celebration.
 
+## Global Scoreboard (no login for players)
+- This project can optionally use a public, write-allowed anonymous key from a backend like Supabase to store scores.
+- To enable, create `scoreboard_config.json` in the project root with the same shape as `scoreboard_config.example.json` and deploy.
+- Schema example (Supabase):
+  - Table: `scores` with columns `name` (text), `score` (int), `eggs` (int), `level` (int), `created_at` (timestamp default now()).
+  - RLS example (simplified; set policies to allow insert/select for anon):
+    - Enable RLS on `scores`.
+    - Policy: `allow_insert`: `using (true)` `with check (true)` for anon role.
+    - Policy: `allow_select`: `using (true)` for anon role.
+  - Use the project anon public key in `scoreboard_config.json`.
+
+
 
