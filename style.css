@@ -140,6 +140,18 @@ canvas#game {
   transform: translateY(2px);
   box-shadow: 0 4px 0 #7f1d3e;
 }
+.text {
+  width: 220px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.25);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+}
+.score-entry .score-row { display:flex; gap:10px; justify-content:center; align-items:center; }
+.scoreboard { text-align:left; margin-top:14px; background: rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:10px 14px; max-height:220px; overflow:auto; }
 .note {
   margin-top: 10px;
   color: var(--muted);

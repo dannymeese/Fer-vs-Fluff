@@ -41,10 +41,19 @@
             <div><span>Kiss</span><span>Z / J</span></div>
             <div><span>Flower</span><span>X / K</span></div>
             <div><span>Bomb</span><span>C / L</span></div>
+            <div><span>Perk Toggle</span><span>Q</span></div>
             <div><span>Pause</span><span>P</span></div>
           </div>
           <button id="startBtn" class="btn">Start</button>
           <div class="note">No downloads. Plays right in your browser.</div>
+          <div id="score-entry" class="score-entry" style="display:none;">
+            <div style="margin:10px 0 6px;">Enter name for scoreboard:</div>
+            <div class="score-row">
+              <input id="usernameInput" class="text" maxlength="16" placeholder="Your name" />
+              <button id="submitScoreBtn" class="btn" style="white-space:nowrap;">Submit</button>
+            </div>
+          </div>
+          <div id="scoreboard" class="scoreboard" style="display:none;"></div>
         </div>
       </div>
 

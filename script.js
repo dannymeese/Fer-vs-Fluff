@@ -19,6 +19,10 @@
   const eggsEl = document.getElementById('eggs');
   const toastEl = document.getElementById('toast');
   const muteBtn = document.getElementById('muteBtn');
+  const scoreEntry = document.getElementById('score-entry');
+  const usernameInput = document.getElementById('usernameInput');
+  const submitScoreBtn = document.getElementById('submitScoreBtn');
+  const scoreboardEl = document.getElementById('scoreboard');
 
   // Game constants
   const GROUND_Y = HEIGHT - 100;
@@ -26,6 +30,7 @@
   const FRICTION = 0.8;
   const AIR_FRICTION = 0.95;
   const MAX_EGGS_STORAGE_KEY = 'fer_vs_fluff_eggs';
+  const HIGHSCORE_KEY = 'fer_vs_fluff_highscores_v1';
 
   // Input state
   const keysDown = new Set();
@@ -52,6 +57,18 @@
     } catch {}
   }
   setEggs(eggCount);
+
+  // Highscores (local storage; can be extended later to remote)
+  function readScores() { try { return JSON.parse(localStorage.getItem(HIGHSCORE_KEY) || '[]'); } catch { return []; } }
+  function writeScores(list) { try { localStorage.setItem(HIGHSCORE_KEY, JSON.stringify(list)); } catch {} }
+  function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+  function renderScores() {
+    const scores = readScores().sort((a,b)=>b.score-a.score).slice(0, 50);
+    if (!scores.length) { scoreboardEl.style.display='none'; return; }
+    scoreboardEl.style.display = 'block';
+    const rows = scores.map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('');
+    scoreboardEl.innerHTML = '<div style="margin-bottom:6px;"><strong>Scoreboard</strong></div>' + rows;
+  }
 
   // Audio engine (Web Audio API, procedurally generated simple tones)
   const AudioEngine = (() => {
@@ -105,20 +122,25 @@
     function playMusic() {
       ensureCtx();
       if (musicNode) { try { musicNode.stop(); } catch {} musicNode.disconnect(); }
-      // Upbeat happy arpeggio loop in C major
-      const base = 261.63; // C4
-      const seq = [0, 4, 7, 12, 7, 4, 9, 12]; // C E G C' G E A C'
+      // Classical motifs: Beethoven (Ode to Joy) and Mozart (Eine kleine Nachtmusik) excerpts
+      const odeToJoy = { base: 261.63, seq: [0,0,2,4,4,2,0,-2, -2,0,2,4,4,2,0,-2, -2,0,-2,-5,0, -2,-5,-9] };
+      const eineKleine = { base: 392.00, seq: [7,7,7,5,4,5,7,5,4,5,7,7,7,5,4,5,7,5,4,5,7] };
+      const motif = (state.waveIndex % 2 === 0) ? odeToJoy : eineKleine;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = 'square';
       o.connect(g); g.connect(musicGain);
-      g.gain.value = 0.14;
+      g.gain.value = 0.12;
       let step = 0;
+      const baseInterval = 220; // ms
+      const speedup = Math.min(60, state.waveIndex * 6);
+      const tickMs = Math.max(120, baseInterval - speedup);
       const interval = setInterval(() => {
-        const f = base * Math.pow(2, seq[step % seq.length] / 12);
+        const semis = motif.seq[step % motif.seq.length];
+        const f = motif.base * Math.pow(2, semis / 12);
         o.frequency.setValueAtTime(f, ctx.currentTime);
         step++;
-      }, 180);
+      }, tickMs);
       o.start();
       musicNode = { stop: () => { clearInterval(interval); o.stop(); } };
     }
@@ -608,6 +630,11 @@
     overlay.classList.add('show');
     startBtn.textContent = 'Retry';
     AudioEngine.playTone(130.81, 0.4, 'sine', 0.6);
+    // Show score submit UI
+    if (typeof scoreEntry !== 'undefined' && scoreEntry) {
+      scoreEntry.style.display = 'block';
+      renderScores();
+    }
   }
 
   // Collision helpers
@@ -742,9 +769,9 @@ function drawBalloon(x, y) {
     // Eggs label shadow to match top bar
     ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillText('Kiss: Z/J  Flower: X/K  Bomb: C/L  Jump: ↑/W/Space  Pause: P', pad + 1, HEIGHT - 18 + 1);
+    ctx.fillText('Kiss: Z/J  Flower: X/K  Bomb: C/L  Perk: Q  Jump: ↑/W/Space  Pause: P', pad + 1, HEIGHT - 18 + 1);
     ctx.fillStyle = '#eaeaea';
-    ctx.fillText('Kiss: Z/J  Flower: X/K  Bomb: C/L  Jump: ↑/W/Space  Pause: P', pad, HEIGHT - 18);
+    ctx.fillText('Kiss: Z/J  Flower: X/K  Bomb: C/L  Perk: Q  Jump: ↑/W/Space  Pause: P', pad, HEIGHT - 18);
 
     // Level indicator
     ctx.fillStyle = '#ffd166';
@@ -868,11 +895,11 @@ function drawBalloon(x, y) {
     enemy.update(dt, player);
 
     // Apply unlock abilities
-    if (state.unlocks.horse) {
+    if (state.unlocks.horse && state.unlocks._active) {
       // Slight speed boost
       player.vx *= 1.02;
     }
-    if (state.unlocks.jetpack && keysDown.has(' ')) {
+    if (state.unlocks.jetpack && state.unlocks._active && keysDown.has(' ')) {
       // Hold jump to hover a bit
       player.vy = Math.min(player.vy, 1.2);
       if (!player.onGround) spawnBurst(player.x + player.w / 2, player.y + player.h, '#ffffff', 1, 1);
@@ -925,9 +952,15 @@ function drawBalloon(x, y) {
       showToast(state.paused ? 'Paused' : 'Resumed', 600);
       if (!state.paused) AudioEngine.ensureCtx();
     }
+    if (key === 'q') {
+      state.unlocks._active = !state.unlocks._active;
+      showToast(state.unlocks._active ? 'Perks ON' : 'Perks OFF');
+    }
     if (overlay.classList.contains('show') && (key === 'enter' || key === ' ')) {
       e.preventDefault();
       startGame(startBtn.textContent === 'Retry');
+      if (scoreEntry) scoreEntry.style.display = 'none';
+      if (scoreboardEl) scoreboardEl.style.display = 'none';
     }
   });
   window.addEventListener('keyup', (e) => {
@@ -937,7 +970,21 @@ function drawBalloon(x, y) {
     state.paused = true;
   });
 
-  startBtn.addEventListener('click', () => startGame(startBtn.textContent === 'Retry'));
+  startBtn.addEventListener('click', () => {
+    startGame(startBtn.textContent === 'Retry');
+    if (scoreEntry) scoreEntry.style.display = 'none';
+    if (scoreboardEl) scoreboardEl.style.display = 'none';
+  });
+  if (typeof submitScoreBtn !== 'undefined' && submitScoreBtn) {
+    submitScoreBtn.addEventListener('click', () => {
+      const name = (usernameInput?.value || 'Player').trim().slice(0,16) || 'Player';
+      const score = eggCount * 100 + state.waveIndex * 10;
+      const list = readScores();
+      list.push({ name, score, ts: Date.now() });
+      writeScores(list);
+      renderScores();
+    });
+  }
 
   // Mute toggle
   function syncMuteBtn() {
