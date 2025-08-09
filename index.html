@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fer vs. Fluff — Street Brawler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="root">
+      <div id="top-bar">
+        <div class="brand">Fer vs. Fluff</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button id="muteBtn" class="icon-btn" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+          <div id="eggs">🥚 0</div>
+        </div>
+      </div>
+
+      <div id="canvas-wrap">
+        <canvas id="game" width="960" height="540"></canvas>
+      </div>
+
+      <div id="overlay" class="overlay show">
+        <div class="panel">
+          <h1>Fer vs. Fluff</h1>
+          <p class="subtitle">A chibi street brawler</p>
+          <div class="desc">
+            You are <strong>Fer</strong>, a Mexican girl with an unbreakable spirit.
+            Battle giant stuffed animals using <strong>kisses</strong> and
+            <strong>flowers</strong>. Win to collect <strong>eggs</strong>!
+          </div>
+          <div class="controls">
+            <div><span>Move</span><span>← → / A D</span></div>
+            <div><span>Jump</span><span>↑ / W / Space</span></div>
+            <div><span>Kiss</span><span>Z / J</span></div>
+            <div><span>Flower</span><span>X / K</span></div>
+            <div><span>Bomb</span><span>C / L</span></div>
+            <div><span>Pause</span><span>P</span></div>
+          </div>
+          <button id="startBtn" class="btn">Start</button>
+          <div class="note">No downloads. Plays right in your browser.</div>
+        </div>
+      </div>
+
+      <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="script.js" defer></script>
+  </body>
+  </html>
+
+
