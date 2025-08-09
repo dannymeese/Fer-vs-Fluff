@@ -23,6 +23,7 @@
   const usernameInput = document.getElementById('usernameInput');
   const submitScoreBtn = document.getElementById('submitScoreBtn');
   const scoreboardEl = document.getElementById('scoreboard');
+  const globalScoreBtn = document.getElementById('globalScoreBtn');
 
   // Game constants
   const GROUND_Y = HEIGHT - 100;
@@ -67,7 +68,41 @@
     if (!scores.length) { scoreboardEl.style.display='none'; return; }
     scoreboardEl.style.display = 'block';
     const rows = scores.map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('');
-    scoreboardEl.innerHTML = '<div style="margin-bottom:6px;"><strong>Scoreboard</strong></div>' + rows;
+    const hint = '<div style="margin-top:8px;color:#9aa0a6;font-size:12px;">Use "Submit Global" to post a score to GitHub Issues (requires sign-in).</div>';
+    const global = globalScoresCache.length
+      ? '<h3>Global (GitHub Issues)</h3>' + globalScoresCache.slice(0, 50).map((s,i)=>`<div>${i+1}. ${escapeHtml(s.name)} — ${s.score}</div>`).join('')
+      : '';
+    scoreboardEl.innerHTML = '<div style="margin-bottom:6px;"><strong>Local Scoreboard</strong></div>' + rows + hint + global;
+  }
+
+  // Global scores via GitHub Issues (public read, no auth). We read issues labeled "score".
+  let globalScoresCache = [];
+  async function fetchGlobalScores() {
+    try {
+      const url = 'https://api.github.com/repos/dannymeese/Fer-vs-Fluff/issues?labels=score&state=open&per_page=100&sort=created&direction=desc';
+      const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+      if (!res.ok) return;
+      const items = await res.json();
+      const parsed = [];
+      for (const it of items) {
+        // Prefer parsing from title like: [Score] Name — 1234
+        let name = 'Player'; let score = 0;
+        const m = /\[Score\]\s*(.+?)\s*[—-]\s*(\d+)/i.exec(it.title || '');
+        if (m) { name = m[1]; score = parseInt(m[2], 10) || 0; }
+        else {
+          const mb = /Score:\s*(\d+)/i.exec(it.body || '');
+          const mn = /Player:\s*(.+)/i.exec(it.body || '');
+          if (mn) name = mn[1].trim();
+          if (mb) score = parseInt(mb[1], 10) || 0;
+        }
+        parsed.push({ name, score, ts: Date.parse(it.created_at) || 0 });
+      }
+      parsed.sort((a,b)=>b.score-a.score || a.ts-b.ts);
+      globalScoresCache = parsed;
+      renderScores();
+    } catch (e) {
+      // ignore
+    }
   }
 
   // Audio engine (Web Audio API, procedurally generated simple tones)
@@ -633,7 +668,7 @@
     // Show score submit UI
     if (typeof scoreEntry !== 'undefined' && scoreEntry) {
       scoreEntry.style.display = 'block';
-      renderScores();
+      fetchGlobalScores().then(()=>renderScores());
     }
   }
 
@@ -983,6 +1018,16 @@ function drawBalloon(x, y) {
       list.push({ name, score, ts: Date.now() });
       writeScores(list);
       renderScores();
+    });
+  }
+  if (typeof globalScoreBtn !== 'undefined' && globalScoreBtn) {
+    globalScoreBtn.addEventListener('click', () => {
+      const name = (usernameInput?.value || 'Player').trim().slice(0,16) || 'Player';
+      const score = eggCount * 100 + state.waveIndex * 10;
+      const title = encodeURIComponent(`[Score] ${name} — ${score}`);
+      const body = encodeURIComponent(`Player: ${name}\nScore: ${score}\nEggs: ${eggCount}\nLevel: ${state.waveIndex + 1}`);
+      const url = `https://github.com/dannymeese/Fer-vs-Fluff/issues/new?title=${title}&body=${body}&labels=score`;
+      window.open(url, '_blank');
     });
   }
 
